@@ -188,6 +188,17 @@
   .hist-del:hover{background:#2a1915}
   .empty-hist{padding:40px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
 
+  /* ---- Catálogo ---- */
+  .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:4px}
+  .cat-card{background:var(--card-bg);color:var(--card-ink);border-radius:14px;overflow:hidden;border:1px solid #e8e1bd;box-shadow:var(--shadow)}
+  .cat-photo{background:#f4f0de;height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .cat-photo img{width:100%;height:100%;object-fit:contain}
+  .cat-body{padding:14px 16px 16px}
+  .cat-body h3{font-family:'Fraunces',serif;font-weight:600;font-size:16px;margin:0 0 4px;line-height:1.2}
+  .cat-notes{color:#6b644a;font-size:12.5px;margin:0 0 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cat-dims{font-size:12px;color:#8a8160;margin-bottom:8px}
+  .cat-price{font-family:'Fraunces',serif;font-weight:700;font-size:19px;color:#8a6d00}
+
   /* ---- Tabs ---- */
   .tabs{background:#0a0a09;border-bottom:1px solid var(--line)}
   .tabs-inner{max-width:1180px;margin:0 auto;padding:12px 20px;display:flex;gap:8px}
@@ -290,6 +301,7 @@
   <div class="tabs-inner">
     <button class="tab-btn on" data-tab="cotizador">Cotizador</button>
     <button class="tab-btn" data-tab="clientes">Clientes <span class="tab-count" id="tabClientesCount">0</span></button>
+    <button class="tab-btn" data-tab="catalogo">Catálogo <span class="tab-count" id="tabCatalogoCount">0</span></button>
   </div>
 </div>
 
@@ -515,6 +527,26 @@
     </table>
     <div class="empty-hist" id="cliEmpty" style="border:none;border-radius:0">Aún no has registrado clientes.</div>
   </div>
+
+</div>
+</div>
+
+<div class="view" id="viewCatalogo" hidden>
+<div class="wrap">
+
+  <div class="section-title"><span class="n">★</span><h2>Catálogo</h2></div>
+  <div class="section-sub">Todo lo que has cotizado, listo para compartir con tus clientes como un link aparte.</div>
+
+  <div class="rate-box">
+    <span class="info">Link público del catálogo (sin PIN, no muestra cotizador ni clientes):</span>
+    <div class="rate-row">
+      <button type="button" class="btn-gold" id="btnCopyCatalogLink">Copiar link</button>
+      <a href="catalogo.html" target="_blank" rel="noopener" class="btn-link">Ver catálogo ↗</a>
+    </div>
+  </div>
+
+  <div class="cat-grid" id="catGrid"></div>
+  <div class="empty-hist" id="catEmpty">Guarda cotizaciones para que aparezcan aquí.</div>
 
 </div>
 </div>
@@ -930,7 +962,35 @@ function renderHistory(){
       </div>`;
     grid.appendChild(el);
   });
+  renderCatalog();
 }
+
+function catalogCardHtml(q){
+  const dimsTxt = (q.x&&q.y&&q.z) ? `${fmtCm(mmToCm(q.x))} × ${fmtCm(mmToCm(q.y))} × ${fmtCm(mmToCm(q.z))}` : '';
+  const precioTxt = q.price ? `${q.currency} ${Number(q.price).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '';
+  return `
+    <div class="cat-card">
+      <div class="cat-photo">${q.foto?`<img src="${q.foto}" alt="${esc(q.name)}">`:''}</div>
+      <div class="cat-body">
+        <h3>${esc(q.name)||'Sin nombre'}</h3>
+        ${q.notes?`<p class="cat-notes">${esc(q.notes)}</p>`:''}
+        ${dimsTxt?`<div class="cat-dims">${dimsTxt}</div>`:''}
+        <div class="cat-price">${precioTxt}</div>
+      </div>
+    </div>`;
+}
+function renderCatalog(){
+  document.getElementById('tabCatalogoCount').textContent = quotes.length;
+  const grid = document.getElementById('catGrid');
+  const empty = document.getElementById('catEmpty');
+  empty.style.display = quotes.length ? 'none' : 'block';
+  grid.innerHTML = quotes.map(catalogCardHtml).join('');
+}
+document.getElementById('btnCopyCatalogLink').addEventListener('click', async ()=>{
+  const link = new URL('catalogo.html', location.href).href;
+  try{ await navigator.clipboard.writeText(link); toast('Link del catálogo copiado'); }
+  catch(e){ toast(link, false); }
+});
 document.getElementById('histGrid').addEventListener('click', async e=>{
   const open=e.target.closest('[data-open]'), dup=e.target.closest('[data-dup]'), del=e.target.closest('[data-del]');
   if(open){ loadIntoDraft(quotes.find(q=>q.id===open.dataset.open)); window.scrollTo({top:0,behavior:'smooth'}); }
@@ -1004,6 +1064,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('on', b===btn));
     document.getElementById('viewCotizador').hidden = btn.dataset.tab!=='cotizador';
     document.getElementById('viewClientes').hidden = btn.dataset.tab!=='clientes';
+    document.getElementById('viewCatalogo').hidden = btn.dataset.tab!=='catalogo';
   });
 });
 
@@ -1027,7 +1088,7 @@ function deleteClienteDoc(id){
   return Promise.resolve();
 }
 if(col){
-  col.where('type','==','cliente').onSnapshot(snap=>{
+  col.where('type','==','cliente').where('pin','==',PIN).onSnapshot(snap=>{
     clientes = snap.docs.map(d=>({ ...d.data(), id: d.id.slice(2) }));
     renderClientes();
   }, ()=>{});

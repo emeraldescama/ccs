@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bazar Emerald · Catálogo</title>
+<meta name="description" content="Catálogo de productos de Bazar Emerald: medidas y precios.">
+<link rel="icon" href="assets/bazar-emerald-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#121210;
+    --panel:#1a1a17;
+    --line:#2d2d27;
+    --ink:#f5f3ea;
+    --muted:#a6a398;
+    --gold:#f6c80d;
+    --card-bg:#fffdf5;
+    --card-ink:#17170f;
+    --radius:16px;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 18px 40px -20px rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(246,200,13,.08), transparent 60%),
+      radial-gradient(700px 400px at 100% 0%, rgba(246,200,13,.05), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-size:15px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px 90px}
+  a{color:inherit}
+
+  header{background:#0a0a09;border-bottom:3px solid var(--gold)}
+  .head-inner{max-width:1180px;margin:0 auto;padding:22px 20px;display:flex;align-items:center;gap:14px}
+  .head-inner img{height:52px;width:auto}
+  .head-inner .title{font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:var(--gold)}
+  .head-inner .tag{font-size:13px;color:var(--muted);margin-top:2px}
+
+  .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;margin-top:28px}
+  .cat-card{background:var(--card-bg);color:var(--card-ink);border-radius:14px;overflow:hidden;border:1px solid #e8e1bd;box-shadow:var(--shadow)}
+  .cat-photo{background:#f4f0de;height:220px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .cat-photo img{width:100%;height:100%;object-fit:contain}
+  .cat-body{padding:16px 18px 18px}
+  .cat-body h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin:0 0 5px;line-height:1.25}
+  .cat-notes{color:#6b644a;font-size:13px;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cat-dims{font-size:12.5px;color:#8a8160;margin-bottom:10px}
+  .cat-price{font-family:'Fraunces',serif;font-weight:700;font-size:21px;color:#8a6d00}
+
+  .empty{padding:70px 20px;text-align:center;color:var(--muted)}
+  .empty .big{font-family:'Fraunces',serif;font-size:20px;color:var(--ink);margin-bottom:6px}
+
+  footer{text-align:center;color:var(--muted);font-size:12.5px;padding:30px 20px}
+  footer b{color:var(--gold)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-inner">
+    <img src="assets/bazar-emerald-logo.png" alt="Bazar Emerald">
+    <div>
+      <div class="title">Catálogo</div>
+      <div class="tag">Medidas y precios de nuestros productos</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="cat-grid" id="catGrid"></div>
+  <div class="empty" id="catEmpty" style="display:none">
+    <div class="big">Todavía no hay productos</div>
+    <div>Vuelve pronto, estamos agregando el catálogo.</div>
+  </div>
+</div>
+
+<footer>Hecho a pedido por <b>Bazar Emerald</b></footer>
+
+<script>
+function esc(t){ return (t==null?'':String(t)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function mmToCm(mm){ return Math.round((Number(mm)||0)/10 * 100)/100; }
+function fmtCm(cm){ return cm? (cm.toLocaleString('es-VE',{minimumFractionDigits:cm%1===0?0:1,maximumFractionDigits:2})+' cm') : '—'; }
+
+function cardHtml(q){
+  const dimsTxt = (q.x&&q.y&&q.z) ? `${fmtCm(mmToCm(q.x))} × ${fmtCm(mmToCm(q.y))} × ${fmtCm(mmToCm(q.z))}` : '';
+  const precioTxt = q.price ? `${q.currency} ${Number(q.price).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '';
+  return `
+    <div class="cat-card">
+      <div class="cat-photo">${q.foto?`<img src="${q.foto}" alt="${esc(q.name)}">`:''}</div>
+      <div class="cat-body">
+        <h3>${esc(q.name)||'Sin nombre'}</h3>
+        ${q.notes?`<p class="cat-notes">${esc(q.notes)}</p>`:''}
+        ${dimsTxt?`<div class="cat-dims">${dimsTxt}</div>`:''}
+        <div class="cat-price">${precioTxt}</div>
+      </div>
+    </div>`;
+}
+function render(items){
+  const grid = document.getElementById('catGrid');
+  const empty = document.getElementById('catEmpty');
+  empty.style.display = items.length ? 'none' : 'block';
+  grid.innerHTML = items.map(cardHtml).join('');
+}
+
+try{
+  firebase.initializeApp({
+    apiKey: "AIzaSyCWh0CWkPRDsyEjcZsGOCJVhweH5kdJdmo",
+    authDomain: "bazar-emerald.firebaseapp.com",
+    projectId: "bazar-emerald",
+    storageBucket: "bazar-emerald.firebasestorage.app",
+    messagingSenderId: "735267111307",
+    appId: "1:735267111307:web:79357c1633ac0488e46f8e"
+  });
+  firebase.firestore().collection('bazar_emerald').where('type','==','quote').onSnapshot(snap=>{
+    const items = snap.docs.map(d=>d.data()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    render(items);
+  }, ()=>{ document.getElementById('catEmpty').style.display='block'; });
+}catch(e){ document.getElementById('catEmpty').style.display='block'; }
+</script>
+</body>
+</html>
