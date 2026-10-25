@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="assets/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
@@ -152,7 +153,7 @@
   }
   .qcard-head img{height:36px;width:auto}
   .qcard-head .wm{font-family:'Fraunces',serif;color:var(--gold);font-weight:600;font-size:15px}
-  .qcard-photo{background:#f4f0de;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .qcard-photo{background:#f4f0de;height:260px;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .qcard-photo img{width:100%;height:100%;object-fit:contain}
   .qcard-photo .ph{color:#b4ac85;font-size:13px;text-align:center;padding:20px}
   .qcard-body{padding:20px 22px 22px}
@@ -367,7 +368,7 @@
         <div class="row2">
           <div class="field">
             <label for="filPrice">Filamento <span class="opt">(USD/kg)</span></label>
-            <input type="number" step="0.01" min="0" id="filPrice" placeholder="18,00">
+            <input type="number" step="0.01" min="0" id="filPrice" value="30">
           </div>
           <div class="field">
             <label for="filGrams">Peso pieza <span class="opt">(g)</span></label>
@@ -391,7 +392,7 @@
           </div>
           <div class="field">
             <label for="marginPct">Margen de ganancia <span class="opt">(% sobre el costo)</span></label>
-            <input type="number" step="1" min="0" id="marginPct" placeholder="80">
+            <input type="number" step="1" min="0" id="marginPct" value="30">
           </div>
         </div>
 
@@ -611,7 +612,7 @@ try{
 
 let quotes = [];
 let draft = { id:null, name:'', notes:'', price:'', currency:'Bs', x:'', y:'', z:'', foto:null, dim:null,
-  filPrice:'', filGrams:'', printHours:'', hourCost:'0.35', extraCost:'', marginPct:'' };
+  filPrice:'30', filGrams:'', printHours:'', hourCost:'0.35', extraCost:'', marginPct:'30' };
 let bcvRate = null;
 
 function uid(){ return (crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random().toString(16).slice(2)); }
@@ -730,7 +731,7 @@ function resizeImage(file, maxW, quality){
   });
 }
 
-function setupDrop(dropId, fileId, phId, clearKey, onImage){
+function setupDrop(dropId, fileId, phId, clearKey, onImage, onRawFile){
   const drop = document.getElementById(dropId);
   const input = document.getElementById(fileId);
   const ph = document.getElementById(phId);
@@ -746,6 +747,7 @@ function setupDrop(dropId, fileId, phId, clearKey, onImage){
       onImage(dataUrl);
       ph.innerHTML = `<img src="${dataUrl}" alt="">`;
       clearBtn.style.display='inline';
+      if(onRawFile) onRawFile(file);
     }catch(e){ toast('No se pudo leer la imagen', true); }
   }
   clearBtn.addEventListener('click', ()=>{
@@ -757,8 +759,39 @@ function setupDrop(dropId, fileId, phId, clearKey, onImage){
   ph.dataset.default = ph.innerHTML;
 }
 
+/* ---------- lectura automática de medidas (OCR sobre la captura de Bambu Studio) ----------
+   Busca el "mm" que sigue a la fila "Tamaño" y toma los 3 números decimales justo antes de
+   él (X, Y, Z) — así no depende de que el OCR lea bien la palabra "Tamaño" con eñe. */
+function parseDimsFromOcr(text){
+  const mmIdx = text.search(/mm/i);
+  if(mmIdx === -1) return null;
+  const nums = [...text.slice(0, mmIdx).matchAll(/\d+[.,]\d+/g)].map(m=>m[0]);
+  if(nums.length < 3) return null;
+  const last3 = nums.slice(-3).map(n=>Number(n.replace(',', '.')));
+  if(last3.some(n=>!n || n<=0)) return null;
+  return { X:last3[0], Y:last3[1], Z:last3[2] };
+}
+async function runDimOcr(file){
+  if(typeof Tesseract === 'undefined') return; // sin OCR disponible: se llena a mano, como siempre
+  toast('Leyendo medidas de la captura…');
+  try{
+    const { data:{ text } } = await Tesseract.recognize(file, 'eng');
+    const dims = parseDimsFromOcr(text);
+    if(!dims){ toast('No pude leer las medidas automáticamente, ingrésalas a mano', true); return; }
+    ['X','Y','Z'].forEach(axis=>{
+      document.getElementById('dim'+axis).value = dims[axis];
+      draft[axis.toLowerCase()] = dims[axis];
+      document.getElementById('cm'+axis).textContent = fmtCm(mmToCm(dims[axis]));
+    });
+    renderCard();
+    toast('Medidas detectadas automáticamente, revisa que estén correctas');
+  }catch(e){
+    toast('No pude leer las medidas automáticamente, ingrésalas a mano', true);
+  }
+}
+
 setupDrop('dropFoto','fileFoto','phFoto','foto', v=>{ draft.foto=v; renderCard(); });
-setupDrop('dropDim','fileDim','phDim','dim', v=>{ draft.dim=v; });
+setupDrop('dropDim','fileDim','phDim','dim', v=>{ draft.dim=v; }, file=>runDimOcr(file));
 
 /* ---------- medidas ---------- */
 function mmToCm(mm){ return Math.round((Number(mm)||0)/10 * 100)/100; }
