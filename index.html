@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="assets/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg:#121210;
@@ -565,9 +567,31 @@
 </div>
 
 <script>
+/* ---------- Firebase: memoria compartida entre computadoras ----------
+   Si Firebase no carga (sin internet, bloqueado, el script no llegó a tiempo) la página
+   sigue funcionando sola: cada cambio se guarda en localStorage de este navegador, como antes. */
+const PIN = '1703';
+const Q_KEY = 'bazar_emerald_cotizador_v1';
+const C_KEY = 'bazar_emerald_clientes_v1';
+const D_KEY = 'bazar_emerald_defaults_v1';
+function localLoad(key, fallback){ try{ const raw=localStorage.getItem(key); return raw?JSON.parse(raw):fallback; }catch(e){ return fallback; } }
+function localSave(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* modo memoria */ } }
+
+let col = null;
+try{
+  firebase.initializeApp({
+    apiKey: "AIzaSyCWh0CWkPRDsyEjcZsGOCJVhweH5kdJdmo",
+    authDomain: "bazar-emerald.firebaseapp.com",
+    projectId: "bazar-emerald",
+    storageBucket: "bazar-emerald.firebasestorage.app",
+    messagingSenderId: "735267111307",
+    appId: "1:735267111307:web:79357c1633ac0488e46f8e"
+  });
+  col = firebase.firestore().collection('bazar_emerald');
+}catch(e){ /* sin Firebase disponible: todo sigue funcionando solo en este navegador */ }
+
 /* ---------- candado de acceso (PIN) ---------- */
 (function(){
-  const PIN = '1703';
   const LOCK_KEY = 'bazar_emerald_access_ok';
   const gate = document.getElementById('pinGate');
   try{ if(localStorage.getItem(LOCK_KEY)==='1'){ gate.style.display='none'; return; } }catch(e){}
@@ -585,8 +609,6 @@
   });
 })();
 
-const KEY = 'bazar_emerald_cotizador_v1';
-const DEF_KEY = 'bazar_emerald_defaults_v1';
 let quotes = [];
 let draft = { id:null, name:'', notes:'', price:'', currency:'Bs', x:'', y:'', z:'', foto:null, dim:null,
   filPrice:'', filGrams:'', printHours:'', hourCost:'0.35', extraCost:'', marginPct:'' };
@@ -597,32 +619,50 @@ function esc(t){ return (t==null?'':String(t)).replace(/[&<>"]/g,c=>({'&':'&amp;
 function money(n){ return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function moneyBs(n){ return 'Bs '+(Number(n)||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
-async function load(){
-  try{
-    const r = await window.storage.get(KEY);
-    if(r && r.value) quotes = JSON.parse(r.value);
-  }catch(e){ /* modo memoria */ }
+/* Cada cotización, cliente y el documento de "defaults" vive como un documento aparte dentro
+   de la misma colección bazar_emerald, cada uno con pin:"1703" (lo exige la regla de Firestore).
+   onSnapshot mantiene todas las pantallas abiertas sincronizadas solas, sin recargar. */
+function saveQuoteDoc(q){
+  if(col) return col.doc('q_'+q.id).set({...q, type:'quote', pin:PIN}).catch(()=>toast('No se pudo guardar en la nube (revisa tu conexión)', true));
+  const i = quotes.findIndex(x=>x.id===q.id);
+  if(i>-1) quotes[i]=q; else quotes.unshift(q);
+  quotes.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  localSave(Q_KEY, quotes); renderHistory();
+  return Promise.resolve();
 }
-async function persist(){
-  try{ await window.storage.set(KEY, JSON.stringify(quotes)); }catch(e){ /* modo memoria */ }
+function deleteQuoteDoc(id){
+  if(col) return col.doc('q_'+id).delete().catch(()=>toast('No se pudo eliminar en la nube', true));
+  quotes = quotes.filter(x=>x.id!==id);
+  localSave(Q_KEY, quotes); renderHistory();
+  return Promise.resolve();
 }
-async function loadDefaults(){
-  try{
-    const r = await window.storage.get(DEF_KEY);
-    if(!r || !r.value) return;
-    const d = JSON.parse(r.value);
-    ['filPrice','hourCost','marginPct','extraCost'].forEach(k=>{
-      if(d[k]!=null){ draft[k]=d[k]; const el=document.getElementById(k); if(el) el.value=d[k]; }
-    });
-    if(d.bcvRate){ bcvRate = d.bcvRate; document.getElementById('bcvRate').value = d.bcvRate; }
-  }catch(e){ /* modo memoria */ }
+if(col){
+  col.where('type','==','quote').onSnapshot(snap=>{
+    quotes = snap.docs.map(d=>({ ...d.data(), id: d.id.slice(2) })).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderHistory();
+  }, ()=>toast('Sin conexión con la nube: trabajando solo en este navegador', true));
+}else{
+  quotes = localLoad(Q_KEY, []);
 }
-async function saveDefaults(){
-  try{
-    await window.storage.set(DEF_KEY, JSON.stringify({
-      filPrice:draft.filPrice, hourCost:draft.hourCost, marginPct:draft.marginPct, extraCost:draft.extraCost, bcvRate
-    }));
-  }catch(e){ /* modo memoria */ }
+
+function saveDefaults(){
+  const payload = { filPrice:draft.filPrice, hourCost:draft.hourCost, marginPct:draft.marginPct, extraCost:draft.extraCost, bcvRate };
+  if(col) return col.doc('defaults').set({...payload, type:'defaults', pin:PIN}).catch(()=>{});
+  localSave(D_KEY, payload);
+  return Promise.resolve();
+}
+function applyDefaults(d){
+  if(!d) return;
+  ['filPrice','hourCost','marginPct','extraCost'].forEach(k=>{
+    if(d[k]!=null){ draft[k]=d[k]; const el=document.getElementById(k); if(el) el.value=d[k]; }
+  });
+  if(d.bcvRate){ bcvRate = d.bcvRate; document.getElementById('bcvRate').value = d.bcvRate; }
+  calc();
+}
+if(col){
+  col.doc('defaults').onSnapshot(doc=>{ if(doc.exists) applyDefaults(doc.data()); }, ()=>{});
+}else{
+  applyDefaults(localLoad(D_KEY, null));
 }
 
 /* ---------- tasa BCV ----------
@@ -827,15 +867,9 @@ function resetDraft(){
 
 document.getElementById('btnSave').addEventListener('click', async ()=>{
   if(!validDraft()) return;
-  if(draft.id){
-    const i = quotes.findIndex(q=>q.id===draft.id);
-    if(i>-1) quotes[i] = {...draft, updatedAt:Date.now()};
-  }else{
-    draft.id = uid();
-    quotes.unshift({...draft, createdAt:Date.now(), updatedAt:Date.now()});
-  }
-  await persist();
-  renderHistory();
+  if(!draft.id) draft.id = uid();
+  const createdAt = quotes.find(q=>q.id===draft.id)?.createdAt || Date.now();
+  await saveQuoteDoc({...draft, createdAt, updatedAt:Date.now()});
   toast('Cotización guardada');
 });
 
@@ -874,8 +908,7 @@ document.getElementById('histGrid').addEventListener('click', async e=>{
   }
   if(del){
     if(confirm('¿Eliminar esta cotización guardada?')){
-      quotes = quotes.filter(x=>x.id!==del.dataset.del);
-      await persist(); renderHistory(); toast('Cotización eliminada');
+      await deleteQuoteDoc(del.dataset.del); toast('Cotización eliminada');
     }
   }
 });
@@ -943,20 +976,31 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 });
 
 /* ---------- clientes ---------- */
-const CLI_KEY = 'bazar_emerald_clientes_v1';
 const ESTADOS = { pagado:'Pagado', elaborando:'Elaborando', envio:'En proceso de envío', finalizado:'Finalizado' };
 let clientes = [];
 let cliFiltro = 'todos';
 let cliQuery = '';
 
-async function loadClientes(){
-  try{
-    const r = await window.storage.get(CLI_KEY);
-    if(r && r.value) clientes = JSON.parse(r.value);
-  }catch(e){ /* modo memoria */ }
+function saveClienteDoc(c){
+  if(col) return col.doc('c_'+c.id).set({...c, type:'cliente', pin:PIN}).catch(()=>toast('No se pudo guardar en la nube (revisa tu conexión)', true));
+  const i = clientes.findIndex(x=>x.id===c.id);
+  if(i>-1) clientes[i]=c; else clientes.unshift(c);
+  localSave(C_KEY, clientes); renderClientes();
+  return Promise.resolve();
 }
-async function persistClientes(){
-  try{ await window.storage.set(CLI_KEY, JSON.stringify(clientes)); }catch(e){ /* modo memoria */ }
+function deleteClienteDoc(id){
+  if(col) return col.doc('c_'+id).delete().catch(()=>toast('No se pudo eliminar en la nube', true));
+  clientes = clientes.filter(x=>x.id!==id);
+  localSave(C_KEY, clientes); renderClientes();
+  return Promise.resolve();
+}
+if(col){
+  col.where('type','==','cliente').onSnapshot(snap=>{
+    clientes = snap.docs.map(d=>({ ...d.data(), id: d.id.slice(2) }));
+    renderClientes();
+  }, ()=>{});
+}else{
+  clientes = localLoad(C_KEY, []);
 }
 function waLink(tel){
   let n=String(tel||'').replace(/\D/g,'');
@@ -1027,9 +1071,8 @@ document.getElementById('cliFiltro').addEventListener('click', e=>{
 document.getElementById('cliBody').addEventListener('change', async e=>{
   const sel = e.target.closest('[data-estado]'); if(!sel) return;
   const c = clientes.find(x=>x.id===sel.dataset.estado); if(!c) return;
-  c.estado = sel.value; c.updatedAt = Date.now();
   sel.className = sel.value;
-  await persistClientes();
+  await saveClienteDoc({...c, estado: sel.value, updatedAt: Date.now()});
   toast(`Estado actualizado: ${ESTADOS[sel.value]}`);
 });
 document.getElementById('cliBody').addEventListener('click', async e=>{
@@ -1039,8 +1082,7 @@ document.getElementById('cliBody').addEventListener('click', async e=>{
   if(del){
     const c = clientes.find(x=>x.id===del.dataset.del);
     if(c && confirm(`¿Eliminar a ${c.nombre} ${c.apellido}?`)){
-      clientes = clientes.filter(x=>x.id!==c.id);
-      await persistClientes(); renderClientes(); toast('Cliente eliminado');
+      await deleteClienteDoc(c.id); toast('Cliente eliminado');
     }
   }
 });
@@ -1080,15 +1122,10 @@ document.getElementById('formCliente').addEventListener('submit', async e=>{
     updatedAt: Date.now(),
   };
   if(!data.nombre) return;
-  if(id){
-    const i = clientes.findIndex(x=>x.id===id);
-    if(i>-1) clientes[i] = {...clientes[i], ...data};
-  }else{
-    clientes.unshift({id:uid(), createdAt:Date.now(), ...data});
-  }
-  await persistClientes();
+  const existing = id ? clientes.find(x=>x.id===id) : null;
+  const finalId = id || uid();
+  await saveClienteDoc({...data, id:finalId, createdAt: existing?.createdAt || Date.now()});
   document.getElementById('mCliente').classList.remove('show');
-  renderClientes();
   toast('Cliente guardado');
 });
 
@@ -1099,11 +1136,8 @@ document.getElementById('btnToCliente').addEventListener('click', ()=>{
 });
 
 /* ---------- init ---------- */
-(async()=>{
-  await load(); await loadDefaults(); await loadClientes();
-  renderHistory(); renderClientes(); renderCard(); calc();
-  fetchBcvRate();
-})();
+renderHistory(); renderClientes(); renderCard(); calc();
+fetchBcvRate();
 </script>
 </body>
 </html>
