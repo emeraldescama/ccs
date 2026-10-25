@@ -240,9 +240,33 @@
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--gold);color:#201a04;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;opacity:0;transition:.25s;z-index:80;box-shadow:0 8px 24px -8px rgba(0,0,0,.5)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.err{background:#d8745a;color:#2a1510}
+
+  /* ---- Candado de acceso (PIN) ---- */
+  .pin-gate{position:fixed;inset:0;background:#0a0a09;z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+  .pin-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:34px 28px;max-width:360px;width:100%;text-align:center;box-shadow:var(--shadow)}
+  .pin-box img{height:52px;margin-bottom:16px}
+  .pin-box h2{font-family:'Fraunces',serif;color:var(--gold);margin:0 0 6px;font-size:20px}
+  .pin-box p{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .pin-box input{width:100%;padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font-size:24px;text-align:center;letter-spacing:10px;font-family:inherit;margin-bottom:14px}
+  .pin-box input:focus{outline:2px solid var(--gold-soft);border-color:var(--gold)}
+  .pin-box button{width:100%}
+  .pin-err{color:#e07a5f;font-size:12.5px;margin-top:12px;min-height:16px}
 </style>
 </head>
 <body>
+
+<div class="pin-gate" id="pinGate">
+  <div class="pin-box">
+    <img src="assets/bazar-emerald-logo.png" alt="Bazar Emerald">
+    <h2>Acceso privado</h2>
+    <p>Ingresa el PIN para entrar al cotizador.</p>
+    <form id="pinForm" autocomplete="off">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" id="pinInput" maxlength="6" placeholder="••••" autocomplete="off" autofocus>
+      <button type="submit" class="btn-gold">Entrar</button>
+    </form>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
 
 <header>
   <div class="head-inner">
@@ -541,6 +565,26 @@
 </div>
 
 <script>
+/* ---------- candado de acceso (PIN) ---------- */
+(function(){
+  const PIN = '1703';
+  const LOCK_KEY = 'bazar_emerald_access_ok';
+  const gate = document.getElementById('pinGate');
+  try{ if(localStorage.getItem(LOCK_KEY)==='1'){ gate.style.display='none'; return; } }catch(e){}
+  document.getElementById('pinForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const val = document.getElementById('pinInput').value.trim();
+    if(val === PIN){
+      try{ localStorage.setItem(LOCK_KEY, '1'); }catch(e){}
+      gate.style.display='none';
+    }else{
+      document.getElementById('pinErr').textContent = 'PIN incorrecto, intenta de nuevo.';
+      document.getElementById('pinInput').value='';
+      document.getElementById('pinInput').focus();
+    }
+  });
+})();
+
 const KEY = 'bazar_emerald_cotizador_v1';
 const DEF_KEY = 'bazar_emerald_defaults_v1';
 let quotes = [];

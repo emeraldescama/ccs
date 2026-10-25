@@ -191,9 +191,31 @@
     td.right{text-align:right}
     .when .ago{display:inline;margin-left:6px}
   }
+
+  /* ---- Candado de acceso (PIN) ---- */
+  .pin-gate{position:fixed;inset:0;background:var(--emerald-band);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+  .pin-box{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:34px 28px;max-width:360px;width:100%;text-align:center;box-shadow:var(--shadow)}
+  .pin-box h2{font-family:'Fraunces',serif;color:var(--emerald-deep);margin:0 0 6px;font-size:20px}
+  .pin-box p{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .pin-box input{width:100%;padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--emerald-tint);color:var(--ink);font-size:24px;text-align:center;letter-spacing:10px;font-family:inherit;margin-bottom:14px}
+  .pin-box input:focus{outline:2px solid var(--emerald-soft);border-color:var(--emerald)}
+  .pin-box button{width:100%}
+  .pin-err{color:var(--inactive);font-size:12.5px;margin-top:12px;min-height:16px}
 </style>
 </head>
 <body>
+
+<div class="pin-gate" id="pinGate">
+  <div class="pin-box">
+    <h2>Acceso privado</h2>
+    <p>Ingresa el PIN para entrar al control de socios.</p>
+    <form id="pinForm" autocomplete="off">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" id="pinInput" maxlength="6" placeholder="••••" autocomplete="off" autofocus>
+      <button type="submit" class="btn-primary">Entrar</button>
+    </form>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
 
 <header>
   <div class="head-inner">
@@ -325,6 +347,26 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ---------- candado de acceso (PIN) ---------- */
+(function(){
+  const PIN = '1703';
+  const LOCK_KEY = 'bazar_emerald_access_ok';
+  const gate = document.getElementById('pinGate');
+  try{ if(localStorage.getItem(LOCK_KEY)==='1'){ gate.style.display='none'; return; } }catch(e){}
+  document.getElementById('pinForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const val = document.getElementById('pinInput').value.trim();
+    if(val === PIN){
+      try{ localStorage.setItem(LOCK_KEY, '1'); }catch(e){}
+      gate.style.display='none';
+    }else{
+      document.getElementById('pinErr').textContent = 'PIN incorrecto, intenta de nuevo.';
+      document.getElementById('pinInput').value='';
+      document.getElementById('pinInput').focus();
+    }
+  });
+})();
+
 const SEED = [{"nombre":"Enmanuel Urdaneta","contacto":"4246868165","pagos":[{"fecha":"2026-05-09","monto":1000.1,"ref":"2379"},{"fecha":"2026-06-10","monto":1146,"ref":"653"},{"fecha":"2026-08-14","monto":1600,"ref":""}]},{"nombre":"Natalie Mei","contacto":"4123992696","pagos":[{"fecha":"2026-05-09","monto":1000.92,"ref":"6735"},{"fecha":"2026-06-17","monto":1194,"ref":"3038"},{"fecha":"2026-07-16","monto":0,"ref":"Cortesia"},{"fecha":"2026-08-24","monto":null,"ref":""}]},{"nombre":"Santiago Lopez","contacto":"4242277991","pagos":[{"fecha":"2026-05-09","monto":1000.92,"ref":"6735"},{"fecha":"2026-07-16","monto":0,"ref":"Cortesia"}]},{"nombre":"José Zambrano","contacto":"4242052683","pagos":[{"fecha":"2026-05-09","monto":1000.92,"ref":"2671"},{"fecha":"2026-06-10","monto":1145.36,"ref":"2986"},{"fecha":"2026-07-17","monto":1194,"ref":"8598"},{"fecha":"2026-08-14","monto":1524.14,"ref":""}]},{"nombre":"Maurizio Santilli","contacto":"4242267429","pagos":[{"fecha":"2026-05-09","monto":1000.8,"ref":"4739"},{"fecha":"2026-06-10","monto":1145.36,"ref":"9617"},{"fecha":"2026-07-16","monto":1454.9,"ref":"8494"},{"fecha":"2026-08-14","monto":1542.14,"ref":""}]},{"nombre":"Moises Serrano","contacto":"4129060421","pagos":[{"fecha":"2026-05-09","monto":999.72,"ref":"4537"}]},{"nombre":"Carlos Guerra","contacto":"4129926392","pagos":[{"fecha":"2026-05-09","monto":1000.92,"ref":"8227"},{"fecha":"2026-06-17","monto":1197.14,"ref":"5031"},{"fecha":"2026-08-18","monto":1546.63,"ref":""}]},{"nombre":"Oswaldo Padron","contacto":"4242383419","pagos":[{"fecha":"2026-05-09","monto":999.72,"ref":"9666"}]},{"nombre":"Isabella Calderon","contacto":"4120303392","pagos":[{"fecha":"2026-05-12","monto":1020,"ref":"7965"},{"fecha":"2026-06-15","monto":1174.81,"ref":"5577"},{"fecha":"2026-08-16","monto":1542,"ref":""}]},{"nombre":"Carlos Batistella","contacto":"4124599812","pagos":[{"fecha":"2026-05-13","monto":1021.57,"ref":"1984"},{"fecha":"2026-07-13","monto":null,"ref":""},{"fecha":"2026-08-18","monto":4639.86,"ref":""}]},{"nombre":"Aaron Peña","contacto":"4241591725","pagos":[{"fecha":"2026-05-14","monto":1100,"ref":"0032"},{"fecha":"2026-06-15","monto":1165.37,"ref":"66"},{"fecha":"2026-07-08","monto":1371.88,"ref":"75"},{"fecha":"2026-09-04","monto":1614.77,"ref":""}]},{"nombre":"Dainer Salazar","contacto":"4127221361","pagos":[{"fecha":"2026-05-14","monto":1030.5,"ref":"2598"},{"fecha":"2026-06-14","monto":1166,"ref":"9054"},{"fecha":"2026-07-14","monto":1448,"ref":"7424"},{"fecha":"2026-08-19","monto":1500,"ref":""}]},{"nombre":"Juliet Yanez","contacto":"4125370084","pagos":[{"fecha":"2026-05-14","monto":1030.5,"ref":"2598"},{"fecha":"2026-06-14","monto":1166,"ref":"9054"},{"fecha":"2026-07-14","monto":1448,"ref":"7424"},{"fecha":"2026-08-19","monto":1500,"ref":""}]},{"nombre":"Rick Pérez","contacto":"4124837262","pagos":[{"fecha":"2026-05-15","monto":1030.36,"ref":"1525"},{"fecha":"2026-06-15","monto":1185.02,"ref":"7248"},{"fecha":"2026-07-16","monto":1464.94,"ref":"1578"},{"fecha":"2026-08-14","monto":1545.08,"ref":""}]},{"nombre":"Amanda Neval","contacto":"4129338320","pagos":[{"fecha":"2026-05-15","monto":1030.36,"ref":"2662"},{"fecha":"2026-06-15","monto":1174.81,"ref":"4660"},{"fecha":"2026-07-16","monto":1459.9,"ref":"1738"},{"fecha":"2026-08-15","monto":1545.08,"ref":""}]},{"nombre":"Gabriel Vicchionacci","contacto":"4142380508","pagos":[{"fecha":"2026-05-15","monto":1030.36,"ref":"2662"},{"fecha":"2026-06-17","monto":1193.56,"ref":"5549"}]},{"nombre":"Jesús Gonzalez","contacto":"4123088070","pagos":[{"fecha":"2026-05-16","monto":1035,"ref":"0750"}]},{"nombre":"Samuel Oramas","contacto":"4123088070","pagos":[{"fecha":"2026-05-16","monto":1035,"ref":"0750"}]},{"nombre":"Arturo Diaz","contacto":"4242589814","pagos":[{"fecha":"2026-05-16","monto":1036,"ref":"0876"}]},{"nombre":"Francesco Palmisano","contacto":"4242001621","pagos":[{"fecha":"2026-05-16","monto":1033.45,"ref":"1478"}]},{"nombre":"Miguel Gil","contacto":"4142232562","pagos":[{"fecha":"2026-05-16","monto":1030.36,"ref":"0437"},{"fecha":"2026-06-13","monto":1165.37,"ref":"4429"},{"fecha":"2026-07-11","monto":1419.39,"ref":"1369"},{"fecha":"2026-09-05","monto":1614.77,"ref":""}]},{"nombre":"Timoty","contacto":"","pagos":[{"fecha":"2026-07-11","monto":null,"ref":""}]},{"nombre":"Andres Silva","contacto":"4129958714","pagos":[{"fecha":"2026-05-20","monto":1041,"ref":"2406"},{"fecha":"2026-06-20","monto":1204.66,"ref":"2542"},{"fecha":"2026-08-21","monto":3120,"ref":""}]},{"nombre":"Gerónimo López","contacto":"4262055098","pagos":[{"fecha":"2026-05-23","monto":1050,"ref":"4964"},{"fecha":"2026-06-23","monto":1193.56,"ref":"6074"},{"fecha":"2026-08-21","monto":3120,"ref":""}]},{"nombre":"Antonio Caruci","contacto":"4241680850","pagos":[{"fecha":"2026-05-23","monto":1062,"ref":"1195"},{"fecha":"2026-06-23","monto":1215,"ref":"5444"},{"fecha":"2026-08-16","monto":1543,"ref":""}]},{"nombre":"Alberto Lozada","contacto":"4264121020","pagos":[{"fecha":"2026-06-01","monto":1108.86,"ref":"8966"},{"fecha":"2026-07-03","monto":1334.1,"ref":"3817"},{"fecha":"2026-09-04","monto":1616,"ref":""}]},{"nombre":"Sabrina Rodriguez","contacto":"4264121020","pagos":[{"fecha":"2026-06-19","monto":1200,"ref":"940"},{"fecha":"2026-07-09","monto":1371.88,"ref":"1019"}]},{"nombre":"Karla Perez","contacto":"","pagos":[{"fecha":"2026-07-09","monto":1400.45,"ref":"7579"}]},{"nombre":"Cesar Mendez","contacto":"04127209626","pagos":[{"fecha":"2026-07-12","monto":1442.69,"ref":"6052"},{"fecha":"2026-08-14","monto":1533.72,"ref":""}]},{"nombre":"Gabriel Giuseppe","contacto":"","pagos":[{"fecha":"2026-07-11","monto":1419.39,"ref":"682"}]},{"nombre":"Brandon Bello","contacto":"04123098258","pagos":[{"fecha":"2026-09-04","monto":2,"ref":""}]},{"nombre":"Eduardo Mejias","contacto":"04142841637","pagos":[{"fecha":"2026-08-16","monto":3084,"ref":""}]},{"nombre":"Arturo Salsero","contacto":"04127686270","pagos":[{"fecha":"2026-08-16","monto":3084,"ref":""}]},{"nombre":"Juan Mejias","contacto":"04127919043","pagos":[{"fecha":"2026-08-16","monto":1544.56,"ref":""}]},{"nombre":"Marco Fajardo","contacto":"04148625454","pagos":[{"fecha":"2026-08-15","monto":1546,"ref":""}]},{"nombre":"Harrysson Ochoa","contacto":"04220286975","pagos":[{"fecha":"2026-08-22","monto":7799,"ref":""}]},{"nombre":"Simon Yunes","contacto":"+14044529004","pagos":[{"fecha":"2026-09-06","monto":39235,"ref":""}]},{"nombre":"Diana Souza","contacto":"04169880891","pagos":[{"fecha":"2026-09-06","monto":1614.77,"ref":""}]}];
 
 const KEY = 'escama_esmeralda_v1';
