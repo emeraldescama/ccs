@@ -326,7 +326,7 @@
 
       <div class="panel">
         <div class="section-title" style="margin-top:0"><span class="n">3</span><h2>Costo de producción</h2></div>
-        <div class="section-sub">Basado en el filamento usado, según el peso que marca Bambu Studio. El precio del filamento y el margen se recuerdan para la próxima vez.</div>
+        <div class="section-sub">Basado en el filamento usado y el tiempo de impresión de Bambu Studio. El precio del filamento, el costo por hora y el margen se recuerdan para la próxima vez.</div>
 
         <div class="rate-box">
           <span class="info" id="rateInfo"><span class="dot warn" id="rateDot"></span>Consultando tasa BCV…</span>
@@ -349,6 +349,16 @@
         </div>
         <div class="row2">
           <div class="field">
+            <label for="printHours">Impresión <span class="opt">(horas)</span></label>
+            <input type="number" step="0.1" min="0" id="printHours" placeholder="4.5">
+          </div>
+          <div class="field">
+            <label for="hourCost">Costo por hora <span class="opt">(USD/h)</span></label>
+            <input type="number" step="0.01" min="0" id="hourCost" value="0.35">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
             <label for="extraCost">Extras <span class="opt">(empaque, fallos… USD)</span></label>
             <input type="number" step="0.01" min="0" id="extraCost" placeholder="1,00">
           </div>
@@ -360,6 +370,7 @@
 
         <div class="breakdown" id="breakdown">
           <div class="ln"><span>Filamento</span><b id="bFil">$0.00</b></div>
+          <div class="ln"><span>Impresión (horas)</span><b id="bMach">$0.00</b></div>
           <div class="ln"><span>Extras</span><b id="bExtra">$0.00</b></div>
           <div class="ln"><span>Costo total</span><b id="bCost">$0.00</b></div>
           <div class="ln total"><span>Precio sugerido</span><span class="v" id="bSugUSD">$0.00</span></div>
@@ -533,7 +544,7 @@ const KEY = 'bazar_emerald_cotizador_v1';
 const DEF_KEY = 'bazar_emerald_defaults_v1';
 let quotes = [];
 let draft = { id:null, name:'', notes:'', price:'', currency:'Bs', x:'', y:'', z:'', foto:null, dim:null,
-  filPrice:'', filGrams:'', extraCost:'', marginPct:'' };
+  filPrice:'', filGrams:'', printHours:'', hourCost:'0.35', extraCost:'', marginPct:'' };
 let bcvRate = null;
 
 function uid(){ return (crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random().toString(16).slice(2)); }
@@ -555,7 +566,7 @@ async function loadDefaults(){
     const r = await window.storage.get(DEF_KEY);
     if(!r || !r.value) return;
     const d = JSON.parse(r.value);
-    ['filPrice','marginPct','extraCost'].forEach(k=>{
+    ['filPrice','hourCost','marginPct','extraCost'].forEach(k=>{
       if(d[k]!=null){ draft[k]=d[k]; const el=document.getElementById(k); if(el) el.value=d[k]; }
     });
     if(d.bcvRate){ bcvRate = d.bcvRate; document.getElementById('bcvRate').value = d.bcvRate; }
@@ -564,7 +575,7 @@ async function loadDefaults(){
 async function saveDefaults(){
   try{
     await window.storage.set(DEF_KEY, JSON.stringify({
-      filPrice:draft.filPrice, marginPct:draft.marginPct, extraCost:draft.extraCost, bcvRate
+      filPrice:draft.filPrice, hourCost:draft.hourCost, marginPct:draft.marginPct, extraCost:draft.extraCost, bcvRate
     }));
   }catch(e){ /* modo memoria */ }
 }
@@ -678,22 +689,24 @@ function fmtCm(cm){ return cm? (cm.toLocaleString('es-VE',{minimumFractionDigits
 });
 
 /* ---------- costeo ---------- */
-const costFields = ['filPrice','filGrams','extraCost','marginPct'];
+const costFields = ['filPrice','filGrams','printHours','hourCost','extraCost','marginPct'];
 costFields.forEach(id=>{
   document.getElementById(id).addEventListener('input', async e=>{
     draft[id] = e.target.value;
-    if(['filPrice','marginPct','extraCost'].includes(id)) await saveDefaults();
+    if(['filPrice','hourCost','marginPct','extraCost'].includes(id)) await saveDefaults();
     calc();
   });
 });
 function calc(){
   const filCost = (Number(draft.filPrice)||0)/1000 * (Number(draft.filGrams)||0);
+  const machCost = (Number(draft.printHours)||0) * (Number(draft.hourCost)||0);
   const extra = Number(draft.extraCost)||0;
-  const cost = filCost + extra;
+  const cost = filCost + machCost + extra;
   const margin = Number(draft.marginPct)||0;
   const sugUsd = cost * (1 + margin/100);
   const sugBs = bcvRate ? sugUsd * bcvRate : null;
   document.getElementById('bFil').textContent = money(filCost);
+  document.getElementById('bMach').textContent = money(machCost);
   document.getElementById('bExtra').textContent = money(extra);
   document.getElementById('bCost').textContent = money(cost);
   document.getElementById('bSugUSD').textContent = money(sugUsd);
@@ -745,9 +758,9 @@ function validDraft(){
 /* ---------- guardar / reset ---------- */
 document.getElementById('btnReset').addEventListener('click', ()=>resetDraft());
 function resetDraft(){
-  const keepDefaults = { filPrice:draft.filPrice, marginPct:draft.marginPct, extraCost:draft.extraCost };
+  const keepDefaults = { filPrice:draft.filPrice, hourCost:draft.hourCost, marginPct:draft.marginPct, extraCost:draft.extraCost };
   draft = { id:null, name:'', notes:'', price:'', currency:'Bs', x:'', y:'', z:'', foto:null, dim:null,
-    filGrams:'', ...keepDefaults };
+    filGrams:'', printHours:'', ...keepDefaults };
   document.getElementById('pName').value='';
   document.getElementById('pNotes').value='';
   document.getElementById('pPrice').value='';
@@ -757,6 +770,7 @@ function resetDraft(){
   document.getElementById('cmY').textContent='0 cm';
   document.getElementById('cmZ').textContent='0 cm';
   document.getElementById('filGrams').value='';
+  document.getElementById('printHours').value='';
   document.getElementById('phFoto').innerHTML = document.getElementById('phFoto').dataset.default;
   document.getElementById('phDim').innerHTML = document.getElementById('phDim').dataset.default;
   document.querySelector('[data-clear="foto"]').style.display='none';
